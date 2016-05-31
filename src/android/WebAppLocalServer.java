@@ -245,7 +245,10 @@ public class WebAppLocalServer extends CordovaPlugin implements AssetBundleManag
     private void checkForUpdates(final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
-                HttpUrl rootUrl = HttpUrl.parse(currentAssetBundle.getRootUrlString());
+                /* Patch for AutoupdateServer */
+                //HttpUrl rootUrl = HttpUrl.parse(currentAssetBundle.getRootUrlString());
+                HttpUrl rootUrl = HttpUrl.parse(currentAssetBundle.getAutoupdateServerUrlString());
+                /* Patch for AutoupdateServer - End */
                 if (rootUrl == null) {
                     callbackContext.error("checkForUpdates requires a rootURL to be configured");
                     return;

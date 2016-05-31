@@ -67,6 +67,9 @@ class AssetBundle {
     private JSONObject runtimeConfig;
     private String appId;
     private String rootUrlString;
+    /* Patch for AutoupdateServer */
+    private String autoupdateServerUrlString;
+    /* Patch for AutoupdateServer - End */
 
     public AssetBundle(CordovaResourceApi resourceApi, Uri directoryUri) throws WebAppException {
         this(resourceApi, directoryUri, null, null);
@@ -186,6 +189,22 @@ class AssetBundle {
         }
         return rootUrlString;
     }
+
+    /* Patch for AutoupdateServer */
+    public String getAutoupdateServerUrlString() {
+        if (autoupdateServerUrlString == null) {
+            JSONObject runtimeConfig = getRuntimeConfig();
+            if (runtimeConfig != null) {
+                try {
+                    autoupdateServerUrlString = runtimeConfig.getJSONObject("PUBLIC_SETTINGS").getString("AutoupdateServer");
+                } catch (JSONException e) {
+                    Log.w(LOG_TAG, "Error reading PUBLIC_SETTINGS.AutoupdateServer from runtime config", e);
+                }
+            }
+        }
+        return autoupdateServerUrlString;
+    }
+    /* Patch for AutoupdateServer - End */
 
     void didMoveToDirectoryAtUri(Uri directoryUri) {
         this.directoryUri = directoryUri;
