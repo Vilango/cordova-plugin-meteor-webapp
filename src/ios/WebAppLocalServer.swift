@@ -39,6 +39,12 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
         configuration.cordovaCompatibilityVersion = currentAssetBundle.cordovaCompatibilityVersion
         
         NSLog("Serving asset bundle version: \(currentAssetBundle.version)")
+
+        /* Patch for AutoupdateServer */
+        configuration.autoupdateServerURL = currentAssetBundle.autoupdateServerURL
+        NSLog("Serving asset bundle autoupdateServerURL: \(currentAssetBundle.autoupdateServerURL)")        
+        /* Patch for AutoupdateServer - End */
+
       }
     }
   }
@@ -229,7 +235,10 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
   }
 
   public func checkForUpdates(command: CDVInvokedUrlCommand) {
-    guard let rootURL = configuration.rootURL else {
+    /* Patch for AutoupdateServer */
+    guard let rootURL = configuration.autoupdateServerURL else {
+    //guard let rootURL = configuration.rootURL else {
+    /* Patch for AutoupdateServer - End */
       let errorMessage = "checkForUpdates requires a rootURL to be configured"
       let result = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAsString: errorMessage)
       commandDelegate?.sendPluginResult(result, callbackId: command.callbackId)

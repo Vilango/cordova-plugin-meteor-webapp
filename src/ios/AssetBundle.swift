@@ -113,6 +113,16 @@ final class AssetBundle {
       }
     }
     
+    /* Patch for AutoupdateServer */
+    var autoupdateServerURL: NSURL? {
+        if let autoupdateServerURLString = JSON["PUBLIC_SETTINGS"]!["AutoupdateServer"] as? String {
+            return NSURL(string: autoupdateServerURLString)
+        } else {
+            return nil
+        }
+    }
+    /* Patch for AutoupdateServer - End */
+    
     var autoupdateVersionCordova: String? {
       return JSON["autoupdateVersionCordova"] as? String
     }
@@ -137,6 +147,12 @@ final class AssetBundle {
   var rootURL: NSURL? {
     return runtimeConfig?.rootURL
   }
+  
+  /* Patch for AutoupdateServer */
+  var autoupdateServerURL: NSURL? {
+      return runtimeConfig?.autoupdateServerURL
+  }
+  /* Patch for AutoupdateServer - End */  
 
   func didMoveToDirectoryAtURL(directoryURL: NSURL) {
     self.directoryURL = directoryURL

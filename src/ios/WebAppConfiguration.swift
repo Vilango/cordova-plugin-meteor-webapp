@@ -36,6 +36,26 @@ final class WebAppConfiguration {
       }
     }
   }
+
+  /* Patch for AutoupdateServer */
+  var autoupdateServerURL: NSURL? {
+      get {
+          return userDefaults.URLForKey("MeteorWebAppAutoupdateServerURL")
+      }
+      set {
+          let oldValue = autoupdateServerURL
+          if newValue != oldValue && newValue != nil {
+              if oldValue != nil {
+                  NSLog("AutoupdateServerURL seems to have changed, new: \(newValue!), old: \(oldValue!)")
+              }
+              
+              userDefaults.setURL(newValue, forKey: "MeteorWebAppAutoupdateServerURL")
+              userDefaults.synchronize()
+          }
+      }
+  }
+  /* Patch for AutoupdateServer - End */
+  
   
   /// The Cordova compatibility version as specified in the asset manifest
   var cordovaCompatibilityVersion: String? {
