@@ -118,9 +118,9 @@ final class AssetBundle {
     }
     
     /* Patch for AutoupdateServer */
-    var autoupdateServerURL: NSURL? {
-        if let autoupdateServerURLString = JSON["PUBLIC_SETTINGS"]!["AutoupdateServer"] as? String {
-            return NSURL(string: autoupdateServerURLString)
+    var autoupdateServerURL: URL? {
+        if let autoupdateServerURLString = json["PUBLIC_SETTINGS"]!["AutoupdateServer"] as? String {
+            return URL(string: autoupdateServerURLString)
         } else {
             return nil
         }
@@ -153,7 +153,7 @@ final class AssetBundle {
   }
   
   /* Patch for AutoupdateServer */
-  var autoupdateServerURL: NSURL? {
+  var autoupdateServerURL: URL? {
       return runtimeConfig?.autoupdateServerURL
   }
   /* Patch for AutoupdateServer - End */  
