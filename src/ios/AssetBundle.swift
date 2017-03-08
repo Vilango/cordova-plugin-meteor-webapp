@@ -5,22 +5,22 @@ private let configJSONRegEx = try! NSRegularExpression(
 
 /// Load the runtime config by extracting and parsing
 /// `__meteor_runtime_config__` from index.html
-func loadRuntimeConfigFromIndexFileAtURL(fileURL: NSURL) throws -> AssetBundle.RuntimeConfig {
+func loadRuntimeConfigFromIndexFileAtURL(_ fileURL: URL) throws -> AssetBundle.RuntimeConfig {
   do {
-    let indexFileString = try NSString(contentsOfURL: fileURL, encoding: NSUTF8StringEncoding)
+    let indexFileString = try NSString(contentsOf: fileURL, encoding: String.Encoding.utf8.rawValue)
     guard
       let match  = configJSONRegEx.firstMatchInString(indexFileString as String),
-      let configString = (indexFileString.substringWithRange(match.rangeAtIndex(1)) as NSString).stringByRemovingPercentEncoding,
-      let configData = configString.dataUsingEncoding(NSUTF8StringEncoding)
-      else { throw WebAppError.UnsuitableAssetBundle(reason: "Couldn't load runtime config from index file", underlyingError: nil) }
-    return AssetBundle.RuntimeConfig(JSON: try NSJSONSerialization.JSONObjectWithData(configData, options: []) as! JSONObject)
+      let configString = (indexFileString.substring(with: match.rangeAt(1)) as NSString).removingPercentEncoding,
+      let configData = configString.data(using: String.Encoding.utf8)
+      else { throw WebAppError.unsuitableAssetBundle(reason: "Couldn't load runtime config from index file", underlyingError: nil) }
+    return AssetBundle.RuntimeConfig(json: try JSONSerialization.jsonObject(with: configData, options: []) as! JSONObject)
   } catch {
-    throw WebAppError.UnsuitableAssetBundle(reason: "Couldn't load runtime config from index file", underlyingError: error)
+    throw WebAppError.unsuitableAssetBundle(reason: "Couldn't load runtime config from index file", underlyingError: error)
   }
 }
 
 final class AssetBundle {
-  private(set) var directoryURL: NSURL
+  private(set) var directoryURL: URL
 
   let version: String
   let cordovaCompatibilityVersion: String
@@ -33,13 +33,13 @@ final class AssetBundle {
     return Array(ownAssetsByURLPath.values)
   }
 
-  convenience init(directoryURL: NSURL, parentAssetBundle: AssetBundle? = nil) throws {
-    let manifestURL = directoryURL.URLByAppendingPathComponent("program.json")
+  convenience init(directoryURL: URL, parentAssetBundle: AssetBundle? = nil) throws {
+    let manifestURL = directoryURL.appendingPathComponent("program.json")
     let manifest = try AssetManifest(fileURL: manifestURL)
     try self.init(directoryURL: directoryURL, manifest: manifest, parentAssetBundle: parentAssetBundle)
   }
 
-  init(directoryURL: NSURL, manifest: AssetManifest, parentAssetBundle: AssetBundle? = nil) throws {
+  init(directoryURL: URL, manifest: AssetManifest, parentAssetBundle: AssetBundle? = nil) throws {
     self.directoryURL = directoryURL
     self.parentAssetBundle = parentAssetBundle
     
@@ -53,7 +53,7 @@ final class AssetBundle {
         let asset = Asset(
           bundle: self,
           filePath: entry.filePath,
-          URLPath: URLPath,
+          urlPath: URLPath,
           fileType: entry.fileType,
           cacheable: entry.cacheable,
           hash: entry.hash,
@@ -67,7 +67,7 @@ final class AssetBundle {
           let sourceMap = Asset(
             bundle: self,
             filePath: sourceMapPath,
-            URLPath: sourceMapURLPath,
+            urlPath: sourceMapURLPath,
             fileType: "json",
             cacheable: true)
           addAsset(sourceMap)
@@ -75,23 +75,23 @@ final class AssetBundle {
       }
     }
 
-    let indexFile = Asset(bundle: self, filePath: "index.html", URLPath: "/", fileType: "html", cacheable: false, hash: nil)
+    let indexFile = Asset(bundle: self, filePath: "index.html", urlPath: "/", fileType: "html", cacheable: false, hash: nil)
     addAsset(indexFile)
     self.indexFile = indexFile
   }
 
-  func addAsset(asset: Asset) {
-    ownAssetsByURLPath[asset.URLPath] = asset
+  func addAsset(_ asset: Asset) {
+    ownAssetsByURLPath[asset.urlPath] = asset
   }
 
-  func assetForURLPath(URLPath: String) -> Asset? {
+  func assetForURLPath(_ URLPath: String) -> Asset? {
     return ownAssetsByURLPath[URLPath] ?? parentAssetBundle?.assetForURLPath(URLPath)
   }
 
-  func cachedAssetForURLPath(URLPath: String, hash: String? = nil) -> Asset? {
-    if let asset = ownAssetsByURLPath[URLPath]
+  func cachedAssetForURLPath(_ URLPath: String, hash: String? = nil) -> Asset? {
+    if let asset = ownAssetsByURLPath[URLPath],
         // If the asset is not cacheable, we require a matching hash
-        where (asset.cacheable || asset.hash != nil) && asset.hash == hash {
+        (asset.cacheable || asset.hash != nil) && asset.hash == hash {
       return asset
     } else {
       return nil
@@ -99,15 +99,19 @@ final class AssetBundle {
   }
   
   struct RuntimeConfig {
-    private let JSON: JSONObject
+    private let json: JSONObject
     
-    var appId: String? {
-      return JSON["appId"] as? String
+    init(json: JSONObject) {
+      self.json = json
     }
     
-    var rootURL: NSURL? {
-      if let rootURLString = JSON["ROOT_URL"] as? String {
-        return NSURL(string: rootURLString)
+    var appId: String? {
+      return json["appId"] as? String
+    }
+    
+    var rootURL: URL? {
+      if let rootURLString = json["ROOT_URL"] as? String {
+        return URL(string: rootURLString)
       } else {
         return nil
       }
@@ -124,7 +128,7 @@ final class AssetBundle {
     /* Patch for AutoupdateServer - End */
     
     var autoupdateVersionCordova: String? {
-      return JSON["autoupdateVersionCordova"] as? String
+      return json["autoupdateVersionCordova"] as? String
     }
   }
   
@@ -133,7 +137,7 @@ final class AssetBundle {
     guard let indexFile = self.indexFile else { return nil }
     
     do {
-      return try loadRuntimeConfigFromIndexFileAtURL(indexFile.fileURL)
+      return try loadRuntimeConfigFromIndexFileAtURL(indexFile.fileURL as URL)
     } catch {
       NSLog("\(error)")
       return nil
@@ -144,7 +148,7 @@ final class AssetBundle {
     return runtimeConfig?.appId
   }
   
-  var rootURL: NSURL? {
+  var rootURL: URL? {
     return runtimeConfig?.rootURL
   }
   
@@ -154,7 +158,7 @@ final class AssetBundle {
   }
   /* Patch for AutoupdateServer - End */  
 
-  func didMoveToDirectoryAtURL(directoryURL: NSURL) {
+  func didMoveToDirectoryAtURL(_ directoryURL: URL) {
     self.directoryURL = directoryURL
   }
 }

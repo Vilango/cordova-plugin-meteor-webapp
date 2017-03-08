@@ -8,7 +8,7 @@ let GCDWebServerRequestAttribute_FilePath = "GCDWebServerRequestAttribute_FilePa
 let localFileSystemPath = "/local-filesystem"
 
 @objc(METWebAppLocalServer)
-public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
+open class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
   /// The local web server responsible for serving assets to the web app
   private(set) var localServer: GCDWebServer!
 
@@ -16,12 +16,12 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
   private var localServerPort: UInt = 0
 
   let authTokenKeyValuePair: String = {
-    let authToken = NSProcessInfo.processInfo().globallyUniqueString
+    let authToken = ProcessInfo.processInfo.globallyUniqueString
     return "cdvToken=\(authToken)"
   }()
 
   /// The www directory in the app bundle
-  private(set) var wwwDirectoryURL: NSURL!
+  private(set) var wwwDirectoryURL: URL!
 
   /// Persistent configuration settings for the webapp
   private(set) var configuration: WebAppConfiguration!
@@ -65,39 +65,39 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
 
   /// The number of seconds to wait for startup to complete, after which
   /// we revert to the last known good version
-  private var startupTimeoutInterval: NSTimeInterval = 20.0
+  private var startupTimeoutInterval: TimeInterval = 20.0
 
   private var isTesting: Bool = false
 
   // MARK: - Lifecycle
 
   /// Called by Cordova on plugin initialization
-  override public func pluginInitialize() {
+  override open func pluginInitialize() {
     super.pluginInitialize()
 
     // Detect whether we are testing the app using
     // cordova-plugin-test-framework
-    if let viewController = self.viewController as? CDVViewController
-      where viewController.startPage == "cdvtests/index.html" {
+    if let viewController = self.viewController as? CDVViewController,
+      viewController.startPage == "cdvtests/index.html" {
         isTesting = true
     }
 
     configuration = WebAppConfiguration()
 
-    wwwDirectoryURL = NSBundle.mainBundle().resourceURL!.URLByAppendingPathComponent("www")
+    wwwDirectoryURL = Bundle.main.resourceURL!.appendingPathComponent("www")
 
     initializeAssetBundles()
 
     // The WebAppLocalServerPort setting is currently only used for testing
-    if let portString = (commandDelegate?.settings["WebAppLocalServerPort".lowercaseString] as? String),
+    if let portString = (commandDelegate?.settings["WebAppLocalServerPort".lowercased()] as? String),
        let localServerPort = UInt(portString) {
       self.localServerPort = localServerPort
     // In all other cases, we use a listening port that has been set during build
     // and that is determined based on the appId. Hopefully this will avoid
     // collisions between Meteor apps installed on the same device
     } else if let viewController = self.viewController as? CDVViewController,
-        let port = NSURLComponents(string: viewController.startPage)?.port {
-      localServerPort = port.unsignedIntegerValue
+        let port = URLComponents(string: viewController.startPage)?.port {
+      localServerPort = UInt(port)
     }
 
     do {
@@ -107,21 +107,21 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
       return
     }
 
-    if let startupTimeoutString = (commandDelegate?.settings["WebAppStartupTimeout".lowercaseString] as? String),
+    if let startupTimeoutString = (commandDelegate?.settings["WebAppStartupTimeout".lowercased()] as? String),
        let startupTimeoutMilliseconds = UInt(startupTimeoutString) {
-      startupTimeoutInterval =  NSTimeInterval(startupTimeoutMilliseconds / 1000)
+      startupTimeoutInterval =  TimeInterval(startupTimeoutMilliseconds / 1000)
     }
 
     if !isTesting {
-      startupTimer = METTimer(queue: dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)) { [weak self] in
+      startupTimer = METTimer(queue: DispatchQueue.global(qos: .utility)) { [weak self] in
         NSLog("App startup timed out, reverting to last known good version")
         self?.revertToLastKnownGoodVersion()
       }
     }
+    
+    NotificationCenter.default.addObserver(self, selector: #selector(WebAppLocalServer.pageDidLoad), name: NSNotification.Name.CDVPageDidLoad, object: webView)
 
-    NSNotificationCenter.defaultCenter().addObserver(self, selector: "applicationDidEnterBackground", name: UIApplicationDidEnterBackgroundNotification, object: nil)
-
-    NSNotificationCenter.defaultCenter().addObserver(self, selector: "pageDidLoad", name: CDVPageDidLoadNotification, object: webView)
+    NotificationCenter.default.addObserver(self, selector: #selector(WebAppLocalServer.applicationDidEnterBackground), name: NSNotification.Name.UIApplicationDidEnterBackground, object: nil)
   }
 
   func initializeAssetBundles() {
@@ -130,26 +130,26 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
     // The initial asset bundle consists of the assets bundled with the app
     let initialAssetBundle: AssetBundle
     do {
-      let directoryURL = wwwDirectoryURL.URLByAppendingPathComponent("application")
+      let directoryURL = wwwDirectoryURL.appendingPathComponent("application")
       initialAssetBundle = try AssetBundle(directoryURL: directoryURL)
     } catch {
       NSLog("Could not load initial asset bundle: \(error)")
       return
     }
 
-    let fileManager = NSFileManager.defaultManager()
+    let fileManager = FileManager.default
 
     // Downloaded versions are stored in Library/NoCloud/meteor
-    let libraryDirectoryURL = NSFileManager.defaultManager().URLsForDirectory(.LibraryDirectory, inDomains: .UserDomainMask).first!
-    let versionsDirectoryURL = libraryDirectoryURL.URLByAppendingPathComponent("NoCloud/meteor")
+    let libraryDirectoryURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+    let versionsDirectoryURL = libraryDirectoryURL.appendingPathComponent("NoCloud/meteor")
 
     // If the last seen initial version is different from the currently bundled
     // version, we delete the versions directory and unset lastDownloadedVersion
     // and blacklistedVersions
     if configuration.lastSeenInitialVersion != initialAssetBundle.version {
       do {
-        if fileManager.fileExistsAtPath(versionsDirectoryURL.path!) {
-          try fileManager.removeItemAtURL(versionsDirectoryURL)
+        if fileManager.fileExists(atPath: versionsDirectoryURL.path) {
+          try fileManager.removeItem(at: versionsDirectoryURL)
         }
       } catch {
         NSLog("Could not remove versions directory: \(error)")
@@ -163,8 +163,8 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
 
     // If the versions directory does not exist, we create it
     do {
-      if !fileManager.fileExistsAtPath(versionsDirectoryURL.path!) {
-        try fileManager.createDirectoryAtURL(versionsDirectoryURL, withIntermediateDirectories: true, attributes: nil)
+      if !fileManager.fileExists(atPath: versionsDirectoryURL.path) {
+        try fileManager.createDirectory(at: versionsDirectoryURL, withIntermediateDirectories: true, attributes: nil)
       }
     } catch {
       NSLog("Could not create versions directory: \(error)")
@@ -187,7 +187,7 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
   }
 
   /// Called by Cordova before page reload
-  override public func onReset() {
+  override open func onReset() {
     super.onReset()
 
     // Clear existing callbacks
@@ -200,7 +200,10 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
       self.pendingAssetBundle = nil
     }
 
-    startupTimer?.startWithTimeInterval(startupTimeoutInterval)
+    // Don't start the startup timer if the app started up in the background
+    if UIApplication.shared.applicationState == UIApplicationState.active {
+      startupTimer?.start(withTimeInterval: startupTimeoutInterval)
+    }
   }
 
   // MARK: - Notifications
@@ -216,13 +219,13 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
 
   // MARK: - Public plugin commands
 
-  public func startupDidComplete(command: CDVInvokedUrlCommand) {
+  open func startupDidComplete(_ command: CDVInvokedUrlCommand) {
     startupTimer?.stop()
 
     // If startup completed successfully, we consider a version good
     configuration.lastKnownGoodVersion = currentAssetBundle.version
 
-    commandDelegate?.runInBackground() {
+    commandDelegate?.run() {
       do {
         try self.assetBundleManager.removeAllDownloadedAssetBundlesExceptFor(self.currentAssetBundle)
       } catch {
@@ -231,64 +234,64 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
     }
 
     let result = CDVPluginResult(status: CDVCommandStatus_OK)
-    self.commandDelegate?.sendPluginResult(result, callbackId: command.callbackId)
+    self.commandDelegate?.send(result, callbackId: command.callbackId)
   }
 
-  public func checkForUpdates(command: CDVInvokedUrlCommand) {
+  open func checkForUpdates(_ command: CDVInvokedUrlCommand) {
     /* Patch for AutoupdateServer */
     guard let rootURL = configuration.autoupdateServerURL else {
     //guard let rootURL = configuration.rootURL else {
     /* Patch for AutoupdateServer - End */
       let errorMessage = "checkForUpdates requires a rootURL to be configured"
-      let result = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAsString: errorMessage)
-      commandDelegate?.sendPluginResult(result, callbackId: command.callbackId)
+      let result = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: errorMessage)
+      commandDelegate?.send(result, callbackId: command.callbackId)
       return
     }
 
-    let baseURL = rootURL.URLByAppendingPathComponent("__cordova/")
+    let baseURL = rootURL.appendingPathComponent("__cordova/")
     assetBundleManager.checkForUpdatesWithBaseURL(baseURL)
 
     let result = CDVPluginResult(status: CDVCommandStatus_OK)
-    commandDelegate?.sendPluginResult(result, callbackId: command.callbackId)
+    commandDelegate?.send(result, callbackId: command.callbackId)
   }
 
-  public func onNewVersionReady(command: CDVInvokedUrlCommand) {
+  open func onNewVersionReady(_ command: CDVInvokedUrlCommand) {
     newVersionReadyCallbackId = command.callbackId
 
     let result = CDVPluginResult(status: CDVCommandStatus_NO_RESULT)
     // This allows us to invoke the callback later
-    result.setKeepCallbackAsBool(true)
-    commandDelegate?.sendPluginResult(result, callbackId: newVersionReadyCallbackId)
+    result?.setKeepCallbackAs(true)
+    commandDelegate?.send(result, callbackId: newVersionReadyCallbackId)
   }
 
-  private func notifyNewVersionReady(version: String?) {
+  private func notifyNewVersionReady(_ version: String?) {
     guard let newVersionReadyCallbackId = newVersionReadyCallbackId else { return }
 
-    let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAsString: version)
+    let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: version)
     // This allows us to invoke the callback later
-    result.setKeepCallbackAsBool(true)
-    commandDelegate?.sendPluginResult(result, callbackId: newVersionReadyCallbackId)
+    result?.setKeepCallbackAs(true)
+    commandDelegate?.send(result, callbackId: newVersionReadyCallbackId)
   }
 
-  public func onError(command: CDVInvokedUrlCommand) {
+  open func onError(_ command: CDVInvokedUrlCommand) {
     errorCallbackId = command.callbackId
 
     let result = CDVPluginResult(status: CDVCommandStatus_NO_RESULT)
     // This allows us to invoke the callback later
-    result.setKeepCallbackAsBool(true)
-    commandDelegate?.sendPluginResult(result, callbackId: errorCallbackId)
+    result?.setKeepCallbackAs(true)
+    commandDelegate?.send(result, callbackId: errorCallbackId)
   }
 
-  private func notifyError(error: ErrorType) {
+  private func notifyError(_ error: Error) {
     NSLog("Download failure: \(error)")
 
     guard let errorCallbackId = errorCallbackId else { return }
 
-    let errorMessage = String(error)
-    let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAsString: errorMessage)
+    let errorMessage = String(describing: error)
+    let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: errorMessage)
     // This allows us to invoke the callback later
-    result.setKeepCallbackAsBool(true)
-    commandDelegate?.sendPluginResult(result, callbackId: errorCallbackId)
+    result?.setKeepCallbackAs(true)
+    commandDelegate?.send(result, callbackId: errorCallbackId)
   }
 
   // MARK: - Managing Versions
@@ -321,7 +324,7 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
 
   // MARK: AssetBundleManagerDelegate
 
-  func assetBundleManager(assetBundleManager: AssetBundleManager, shouldDownloadBundleForManifest manifest: AssetManifest) -> Bool {
+  func assetBundleManager(_ assetBundleManager: AssetBundleManager, shouldDownloadBundleForManifest manifest: AssetManifest) -> Bool {
     // No need to redownload the current or the pending version
     if currentAssetBundle.version == manifest.version || pendingAssetBundle?.version == manifest.version {
       return false
@@ -329,20 +332,20 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
 
     // Don't download blacklisted versions
     if configuration.blacklistedVersions.contains(manifest.version) {
-      notifyError(WebAppError.UnsuitableAssetBundle(reason: "Skipping downloading blacklisted version", underlyingError: nil))
+      notifyError(WebAppError.unsuitableAssetBundle(reason: "Skipping downloading blacklisted version", underlyingError: nil))
       return false
     }
     
     // Don't download versions potentially incompatible with the bundled native code
     if manifest.cordovaCompatibilityVersion != configuration.cordovaCompatibilityVersion {
-      notifyError(WebAppError.UnsuitableAssetBundle(reason: "Skipping downloading new version because the Cordova platform version or plugin versions have changed and are potentially incompatible", underlyingError: nil))
+      notifyError(WebAppError.unsuitableAssetBundle(reason: "Skipping downloading new version because the Cordova platform version or plugin versions have changed and are potentially incompatible", underlyingError: nil))
       return false
     }
 
     return true
   }
 
-  func assetBundleManager(assetBundleManager: AssetBundleManager, didFinishDownloadingBundle assetBundle: AssetBundle) {
+  func assetBundleManager(_ assetBundleManager: AssetBundleManager, didFinishDownloadingBundle assetBundle: AssetBundle) {
     NSLog("Finished downloading new asset bundle version: \(assetBundle.version)")
 
     configuration.lastDownloadedVersion = assetBundle.version
@@ -350,7 +353,7 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
     notifyNewVersionReady(assetBundle.version)
   }
 
-  func assetBundleManager(assetBundleManager: AssetBundleManager, didFailDownloadingBundleWithError error: ErrorType) {
+  func assetBundleManager(_ assetBundleManager: AssetBundleManager, didFailDownloadingBundleWithError error: Error) {
     notifyError(error)
   }
 
@@ -359,7 +362,7 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
   func startLocalServer() throws {
     localServer = GCDWebServer()
     // setLogLevel for some reason expects an int instead of an enum
-    GCDWebServer.setLogLevel(GCDWebServerLoggingLevel.Info.rawValue)
+    GCDWebServer.setLogLevel(GCDWebServerLoggingLevel.info.rawValue)
 
     // Handlers are added last to first
     addNotFoundHandler()
@@ -369,9 +372,9 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
     addHandlerForAssetBundle()
 
     let options = [
-      GCDWebServerOption_Port: NSNumber(unsignedInteger: localServerPort),
+      GCDWebServerOption_Port: NSNumber(value: localServerPort as UInt),
       GCDWebServerOption_BindToLocalhost: true]
-    try localServer.startWithOptions(options)
+    try localServer.start(options: options)
 
     // Set localServerPort to the assigned port, in case it is different
     localServerPort = localServer.port
@@ -386,108 +389,115 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
   // MARK: Request Handlers
 
   private func addHandlerForAssetBundle() {
-    localServer.addHandlerWithMatchBlock({ [weak self] (requestMethod, requestURL, requestHeaders, URLPath, URLQuery) -> GCDWebServerRequest! in
+    localServer.addHandler(match: { [weak self] (requestMethod, requestURL, requestHeaders, urlPath, urlQuery) -> GCDWebServerRequest! in
       if requestMethod != "GET" { return nil }
-      guard let asset = self?.currentAssetBundle?.assetForURLPath(URLPath) else { return nil }
+      guard let urlPath = urlPath else { return nil }
+      guard let asset = self?.currentAssetBundle?.assetForURLPath(urlPath) else { return nil }
 
-      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: URLPath, query: URLQuery)
-      request.setAttribute(Box(asset), forKey: GCDWebServerRequestAttribute_Asset)
+      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: urlPath, query: urlQuery)!
+      request.setAttribute(asset, forKey: GCDWebServerRequestAttribute_Asset)
       return request
     }) { (request) -> GCDWebServerResponse! in
-        let asset = (request.attributeForKey(GCDWebServerRequestAttribute_Asset) as! Box<Asset>).value
-        return self.responseForAsset(request, asset: asset)
+        let asset = request?.attribute(forKey: GCDWebServerRequestAttribute_Asset) as! Asset
+        return self.responseForAsset(request!, asset: asset)
     }
   }
 
   private func addHandlerForWwwDirectory() {
-    localServer.addHandlerWithMatchBlock({ [weak self] (requestMethod, requestURL, requestHeaders, URLPath, URLQuery) -> GCDWebServerRequest! in
+    localServer.addHandler(match: { [weak self] (requestMethod, requestURL, requestHeaders, urlPath, urlQuery) -> GCDWebServerRequest! in
       if requestMethod != "GET" { return nil }
+      guard let urlPath = urlPath else { return nil }
 
       // Do not serve files from /application, because these should only be served through the initial asset bundle
-      if URLPath.hasPrefix("/application") { return nil }
+      if (urlPath.hasPrefix("/application")) { return nil }
 
-      guard let fileURL = self?.wwwDirectoryURL?.URLByAppendingPathComponent(URLPath) else { return nil }
+      guard let fileURL = self?.wwwDirectoryURL?.appendingPathComponent(urlPath) else { return nil }
       if fileURL.isRegularFile != true { return nil }
 
-      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: URLPath, query: URLQuery)
-      request.setAttribute(fileURL.path!, forKey: GCDWebServerRequestAttribute_FilePath)
+      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: urlPath, query: urlQuery)
+      request?.setAttribute(fileURL.path, forKey: GCDWebServerRequestAttribute_FilePath)
       return request
     }) { (request) -> GCDWebServerResponse! in
-      let filePath = request.attributeForKey(GCDWebServerRequestAttribute_FilePath) as! String
-      return self.responseForFile(request, filePath: filePath, cacheable: false)
+      let filePath = request?.attribute(forKey: GCDWebServerRequestAttribute_FilePath) as! String
+      return self.responseForFile(request!, filePath: filePath, cacheable: false)
     }
   }
 
   private func addHandlerForLocalFileSystem() {
-    localServer.addHandlerWithMatchBlock({ (requestMethod, requestURL, requestHeaders, URLPath, URLQuery) -> GCDWebServerRequest! in
+    localServer.addHandler(match: { (requestMethod, requestURL, requestHeaders, urlPath, urlQuery) -> GCDWebServerRequest! in
       if requestMethod != "GET" { return nil }
+      guard let urlPath = urlPath else { return nil }
 
-      if !URLPath.hasPrefix(localFileSystemPath) { return nil }
+      if !(urlPath.hasPrefix(localFileSystemPath)) { return nil }
 
-      let filePath = URLPath.substringFromIndex(localFileSystemPath.endIndex)
-      let fileURL = NSURL(fileURLWithPath: filePath)
+      let filePath = urlPath.substring(from: localFileSystemPath.endIndex)
+      let fileURL = URL(fileURLWithPath: filePath)
       if fileURL.isRegularFile != true { return nil }
 
-      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: URLPath, query: URLQuery)
-      request.setAttribute(filePath, forKey: GCDWebServerRequestAttribute_FilePath)
+      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: urlPath, query: urlQuery)
+      request?.setAttribute(filePath, forKey: GCDWebServerRequestAttribute_FilePath)
       return request
       }) { (request) -> GCDWebServerResponse! in
-        let filePath = request.attributeForKey(GCDWebServerRequestAttribute_FilePath) as! String
-        return self.responseForFile(request, filePath: filePath, cacheable: false)
+        let filePath = request?.attribute(forKey: GCDWebServerRequestAttribute_FilePath) as! String
+        return self.responseForFile(request!, filePath: filePath, cacheable: false)
     }
   }
 
   private func addIndexFileHandler() {
-    localServer.addHandlerWithMatchBlock({ [weak self] (requestMethod, requestURL, requestHeaders, URLPath, URLQuery) -> GCDWebServerRequest! in
+    localServer.addHandler(match: { [weak self] (requestMethod, requestURL, requestHeaders, urlPath, urlQuery) -> GCDWebServerRequest! in
       if requestMethod != "GET" { return nil }
+      guard let urlPath = urlPath else { return nil }
 
       // Don't serve index.html for local file system paths
-      if URLPath.hasPrefix(localFileSystemPath) { return nil }
+      if (urlPath.hasPrefix(localFileSystemPath)) { return nil }
 
-      if URLPath == "/favicon.ico" { return nil }
+      if urlPath == "/favicon.ico" { return nil }
 
       guard let indexFile = self?.currentAssetBundle?.indexFile else { return nil }
 
-      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: URLPath, query: URLQuery)
-      request.setAttribute(Box(indexFile), forKey: GCDWebServerRequestAttribute_Asset)
+      let request = GCDWebServerRequest(method: requestMethod, url: requestURL, headers: requestHeaders, path: urlPath, query: urlQuery)
+      request?.setAttribute(indexFile, forKey: GCDWebServerRequestAttribute_Asset)
       return request
       }) { (request) -> GCDWebServerResponse! in
-        let asset = (request.attributeForKey(GCDWebServerRequestAttribute_Asset) as! Box<Asset>).value
-        return self.responseForAsset(request, asset: asset)
+        let asset = request?.attribute(forKey: GCDWebServerRequestAttribute_Asset) as! Asset
+        return self.responseForAsset(request!, asset: asset)
     }
   }
 
   private func addNotFoundHandler() {
-    localServer.addDefaultHandlerForMethod("GET", requestClass: GCDWebServerRequest.self) { (request) -> GCDWebServerResponse! in
-           return GCDWebServerResponse(statusCode: GCDWebServerClientErrorHTTPStatusCode.HTTPStatusCode_NotFound.rawValue)
+    localServer.addDefaultHandler(forMethod: "GET", request: GCDWebServerRequest.self) { (request) -> GCDWebServerResponse! in
+      return GCDWebServerResponse(statusCode: GCDWebServerClientErrorHTTPStatusCode.httpStatusCode_NotFound.rawValue)
     }
   }
 
-  private func responseForAsset(request: GCDWebServerRequest, asset: Asset) -> GCDWebServerResponse {
-    let filePath = asset.fileURL.path!
+  private func responseForAsset(_ request: GCDWebServerRequest, asset: Asset) -> GCDWebServerResponse {
+    let filePath = asset.fileURL.path
     return responseForFile(request, filePath: filePath, cacheable: asset.cacheable, hash: asset.hash, sourceMapURLPath: asset.sourceMapURLPath)
   }
 
-  private func responseForFile(request: GCDWebServerRequest, filePath: String, cacheable: Bool, hash: String? = nil, sourceMapURLPath: String? = nil) -> GCDWebServerResponse {
+  private func responseForFile(_ request: GCDWebServerRequest, filePath: String, cacheable: Bool, hash: String? = nil, sourceMapURLPath: String? = nil) -> GCDWebServerResponse {
     // To protect our server from access by other apps running on the same device,
     // we check whether the rponsequest contains an auth token.
     // The auth token can be passed either as a query item or as a cookie.
     // If the auth token was passed as a query item, we set the cookie.
     var shouldSetCookie = false
-    if let query = request.URL.query where query.containsString(authTokenKeyValuePair) {
+    if let query = request.url.query, query.contains(authTokenKeyValuePair) {
       shouldSetCookie = true
-    } else if let cookie = request.headers["Cookie"] where cookie.containsString(authTokenKeyValuePair) {
+    } else if let cookie = request.headers["Cookie"], (cookie as AnyObject).contains(authTokenKeyValuePair) {
     } else {
-      return GCDWebServerResponse(statusCode: GCDWebServerClientErrorHTTPStatusCode.HTTPStatusCode_Forbidden.rawValue)
+      return GCDWebServerResponse(statusCode: GCDWebServerClientErrorHTTPStatusCode.httpStatusCode_Forbidden.rawValue)
     }
 
-    if !NSFileManager.defaultManager().fileExistsAtPath(filePath) {
+    if !FileManager.default.fileExists(atPath: filePath) {
       NSLog("File not found: \(filePath)")
-      return GCDWebServerResponse(statusCode: GCDWebServerClientErrorHTTPStatusCode.HTTPStatusCode_NotFound.rawValue)
+      return GCDWebServerResponse(statusCode: GCDWebServerClientErrorHTTPStatusCode.httpStatusCode_NotFound.rawValue)
     }
 
     // Support partial requests using byte ranges
-    let response = GCDWebServerFileResponse(file: filePath, byteRange: request.byteRange)
+    guard let response = GCDWebServerFileResponse(file: filePath, byteRange: request.byteRange) else {
+      return GCDWebServerResponse(statusCode: GCDWebServerClientErrorHTTPStatusCode.httpStatusCode_NotFound.rawValue)
+    }
+    
     response.setValue("bytes", forAdditionalHeader: "Accept-Ranges")
 
     if shouldSetCookie {
@@ -496,8 +506,8 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
 
     // Only cache files when the file is cacheable and the request URL includes a cache buster
     let shouldCache = cacheable &&
-      (!(request.URL.query?.isEmpty ?? true)
-        || sha1HashRegEx.matches(request.URL.path!))
+      (!(request.url.query?.isEmpty ?? true)
+        || sha1HashRegEx.matches(request.url.path))
     response.cacheControlMaxAge = UInt(shouldCache ? oneYearInSeconds : 0)
 
     // If we don't set an ETag ourselves, GCDWebServerFileResponse will generate
@@ -513,7 +523,7 @@ public class WebAppLocalServer: METPlugin, AssetBundleManagerDelegate {
 
     // If the asset has a source map, set the X-SourceMap header
     if let sourceMapURLPath = sourceMapURLPath,
-        let sourceMapURL = NSURL(string: sourceMapURLPath, relativeToURL: localServer.serverURL) {
+        let sourceMapURL = URL(string: sourceMapURLPath, relativeTo: localServer.serverURL) {
       response.setValue(sourceMapURL.absoluteString, forAdditionalHeader: "X-SourceMap")
     }
 

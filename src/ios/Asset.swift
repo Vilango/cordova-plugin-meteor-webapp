@@ -1,21 +1,20 @@
 struct Asset {
   let bundle: AssetBundle
   let filePath: String
-  var fileURL: NSURL {
-    return bundle.directoryURL.URLByAppendingPathComponent(filePath,
-      isDirectory: false)
+  var fileURL: URL {
+    return bundle.directoryURL.appendingPathComponent(filePath, isDirectory: false)
   }
-  let URLPath: String
+  let urlPath: String
   let fileType: String?
   let cacheable: Bool
   let hash: String?
   let sourceMapURLPath: String?
 
-  init(bundle: AssetBundle, filePath: String, URLPath: String, fileType: String? = nil,
+  init(bundle: AssetBundle, filePath: String, urlPath: String, fileType: String? = nil,
       cacheable: Bool, hash: String? = nil, sourceMapURLPath: String? = nil) {
     self.bundle = bundle
     self.filePath = filePath
-    self.URLPath = URLPath
+    self.urlPath = urlPath
     self.fileType = fileType
     self.cacheable = cacheable
     self.hash = hash
@@ -25,15 +24,15 @@ struct Asset {
 
 extension Asset: CustomStringConvertible {
   var description: String {
-    return URLPath
+    return urlPath
   }
 }
 
 extension Asset: Hashable, Equatable {
-  var hashValue: Int { return ObjectIdentifier(bundle).hashValue ^ URLPath.hashValue }
+  var hashValue: Int { return ObjectIdentifier(bundle).hashValue ^ urlPath.hashValue }
 }
 
 func ==(lhs: Asset, rhs: Asset) -> Bool {
   return ObjectIdentifier(lhs.bundle) == ObjectIdentifier(rhs.bundle)
-    && lhs.URLPath == rhs.URLPath
+    && lhs.urlPath == rhs.urlPath
 }
