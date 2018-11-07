@@ -7,7 +7,7 @@
   <keywords>cordova,meteor</keywords>
   <author>Meteor Development Group</author>
   <license>MIT</license>
-  <repo>https://github.com/meteor/cordova-plugin-meteor-webapp.git</repo>
+  <repo>https://github.com/Vilango/cordova-plugin-meteor-webapp.git</repo>
 
   <engines>
     <engine name="cordova" version=">=5.4.1" />
