@@ -1,9 +1,9 @@
 {
-  "name": "cordova-vilango-plugin-meteor-webapp",
-  "version": "1.6.0-e",
+  "name": "cordova-plugin-meteor-webapp",
+  "version": "1.6.0-g",
   "description": "Cordova plugin that serves a Meteor web app through a local server and implements hot code push",
   "cordova": {
-    "id": "cordova-vilango-plugin-meteor-webapp",
+    "id": "cordova-plugin-meteor-webapp",
     "platforms": [
       "android",
       "ios"

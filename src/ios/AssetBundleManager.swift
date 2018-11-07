@@ -92,7 +92,7 @@ final class AssetBundleManager: AssetBundleDownloaderDelegate {
   func checkForUpdatesWithBaseURL(_ baseURL: URL) {
     let manifestURL = URL(string: "manifest.json", relativeTo: baseURL)!
 
-    NSLog("Start downloading asset manifest from: \(manifestURL)")
+    NSLog("XXX Start downloading asset manifest from: \(manifestURL)")
 
     let dataTask = session.dataTask(with: manifestURL, completionHandler: {
       (data, response, error) in

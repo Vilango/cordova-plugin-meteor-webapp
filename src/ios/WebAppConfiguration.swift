@@ -40,7 +40,9 @@ final class WebAppConfiguration {
   /* Patch for AutoupdateServer */
   var autoupdateServerURL: URL? {
       get {
-          return userDefaults.url(forKey: "MeteorWebAppAutoupdateServerURL")
+          let url = userDefaults.url(forKey: "MeteorWebAppAutoupdateServerURL")
+          NSLog("autoupdateServerURL.get: \(url)")
+          return url
       }
       set {
           let oldValue = autoupdateServerURL
