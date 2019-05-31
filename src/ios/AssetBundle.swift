@@ -10,7 +10,7 @@ func loadRuntimeConfigFromIndexFileAtURL(_ fileURL: URL) throws -> AssetBundle.R
     let indexFileString = try NSString(contentsOf: fileURL, encoding: String.Encoding.utf8.rawValue)
     guard
       let match  = configJSONRegEx.firstMatchInString(indexFileString as String),
-      let configString = (indexFileString.substring(with: match.rangeAt(1)) as NSString).removingPercentEncoding,
+      let configString = (indexFileString.substring(with: match.range(at: 1)) as NSString).removingPercentEncoding,
       let configData = configString.data(using: String.Encoding.utf8)
       else { throw WebAppError.unsuitableAssetBundle(reason: "Couldn't load runtime config from index file", underlyingError: nil) }
     return AssetBundle.RuntimeConfig(json: try JSONSerialization.jsonObject(with: configData, options: []) as! JSONObject)
@@ -42,7 +42,7 @@ final class AssetBundle {
   init(directoryURL: URL, manifest: AssetManifest, parentAssetBundle: AssetBundle? = nil) throws {
     self.directoryURL = directoryURL
     self.parentAssetBundle = parentAssetBundle
-    
+
     self.version = manifest.version
     self.cordovaCompatibilityVersion = manifest.cordovaCompatibilityVersion
 
@@ -88,6 +88,10 @@ final class AssetBundle {
     return ownAssetsByURLPath[URLPath] ?? parentAssetBundle?.assetForURLPath(URLPath)
   }
 
+  func assetExistsInBundle(_ URLPath: String) -> Bool {
+    return ownAssetsByURLPath[URLPath] != nil
+  }
+
   func cachedAssetForURLPath(_ URLPath: String, hash: String? = nil) -> Asset? {
     if let asset = ownAssetsByURLPath[URLPath],
         // If the asset is not cacheable, we require a matching hash
@@ -97,18 +101,18 @@ final class AssetBundle {
       return nil
     }
   }
-  
+
   struct RuntimeConfig {
     private let json: JSONObject
-    
+
     init(json: JSONObject) {
       self.json = json
     }
-    
+
     var appId: String? {
       return json["appId"] as? String
     }
-    
+
     var rootURL: URL? {
       if let rootURLString = json["ROOT_URL"] as? String {
         return URL(string: rootURLString)
@@ -131,11 +135,11 @@ final class AssetBundle {
       return json["autoupdateVersionCordova"] as? String
     }
   }
-  
+
   /// The runtime config is lazily initialized by loading it from the index.html
   lazy var runtimeConfig: RuntimeConfig? = {
     guard let indexFile = self.indexFile else { return nil }
-    
+
     do {
       return try loadRuntimeConfigFromIndexFileAtURL(indexFile.fileURL as URL)
     } catch {
@@ -143,11 +147,11 @@ final class AssetBundle {
       return nil
     }
   }()
-  
+
   var appId: String? {
     return runtimeConfig?.appId
   }
-  
+
   var rootURL: URL? {
     return runtimeConfig?.rootURL
   }
